@@ -1,0 +1,72 @@
+name: Booking image sync
+
+on:
+  schedule:
+    - cron: "17 3 1 * *"        # monthly: 1st of the month, 03:17 UTC.   Weekly instead: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report (uploads the reports to OneDrive, changes nothing else)"
+        type: boolean
+        default: true
+      only:
+        description: "Limit to hotels: Sr. numbers or name parts, comma separated (empty = all)"
+        required: false
+        default: ""
+
+concurrency:                    # never two runs at once
+  group: booking-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest      # to use your own PC/server (home/office IP): runs-on: self-hosted
+    timeout-minutes: 350        # hosted runners stop jobs at 6 h
+    env:
+      MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+      MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+      MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}        # app-only mode
+      MS_REFRESH_TOKEN: ${{ secrets.MS_REFRESH_TOKEN }}        # signed-in-user mode
+      GH_PAT: ${{ secrets.GH_PAT }}                            # optional, only to store the rotated refresh token
+      ONEDRIVE_USER: ${{ vars.ONEDRIVE_USER }}                 # app-only mode: e-mail of the drive owner
+      ONEDRIVE_WORKBOOK_PATH: ${{ vars.ONEDRIVE_WORKBOOK_PATH }}   # e.g. NOVUM/NOVUM_Hospitality_Hotels_with_Booking_Images.xlsx
+      ONEDRIVE_IMAGES_FOLDER: ${{ vars.ONEDRIVE_IMAGES_FOLDER }}   # folder that CONTAINS 'novum-hotels-images' (default: the workbook's folder)
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      ONLY: ${{ inputs.only }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Sync
+        run: |
+          cloud=(--max-minutes 300)
+          rest=(--channel chrome --challenge-wait 60)          # Chrome is preinstalled on ubuntu-latest
+          [ "$DRY_RUN" = "true" ] && cloud+=(--dry-run)
+          [ -n "$ONLY" ] && rest+=(--only "$ONLY")
+          xvfb-run -a python cloud_sync.py "${cloud[@]}" "${rest[@]}"   # visible browser inside a virtual screen
+
+      - name: Store rotated refresh token (signed-in-user mode, optional)
+        if: always() && env.GH_PAT != '' && hashFiles('sync_run/token.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh secret set MS_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" \
+            --body "$(python -c 'import json;print(json.load(open("sync_run/token.json"))["refresh_token"])')"
+
+      - name: Keep logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-logs
+          path: |
+            sync_run/sync.log
+            sync_run/hotels_report.csv
+            sync_run/new_images.csv
+          retention-days: 14
+          if-no-files-found: ignore
