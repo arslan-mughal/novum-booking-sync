@@ -1,0 +1,20 @@
+# --- ADD THIS FILE AS .gitignore IN THE REPO ROOT BEFORE YOUR FIRST PUSH ---
+# Secrets / local config - never commit these
+cloud.env
+.env
+sync_run/
+token.json
+
+# Local data - the workbook and images live in OneDrive, not in git
+*.xlsx
+*.xlsm
+novum-hotels-images/
+image/
+*_updated.xlsx
+sync-reports/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
