@@ -1,4 +1,3 @@
-# --- ADD THIS FILE AS .gitignore IN THE REPO ROOT BEFORE YOUR FIRST PUSH ---
 # Secrets / local config - never commit these
 cloud.env
 .env

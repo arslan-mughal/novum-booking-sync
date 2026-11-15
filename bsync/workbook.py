@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from copy import copy
 from typing import Iterable
+from urllib.parse import quote
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -143,6 +144,18 @@ def _last_data_row(ws) -> int:
     return r
 
 
+def local_file_link(folder: str, file_name: str) -> str:
+    """Relative link for a new row's 'Local File' cell, matching the existing rows exactly:
+    ``image/<hotel>/<room>/<file>`` with every segment URL-encoded (spaces, ö, ², ...).
+    The workbook sits next to the extracted ``image`` folder, so the link is relative to the
+    workbook - it is NOT the 'Local Folder' value (which starts with 'novum-hotels-images/')."""
+    parts = [p for p in (folder or "").split("/") if p]
+    if parts and parts[0] == DEFAULT_ROOT:
+        parts = parts[1:]
+    parts.append(file_name)
+    return "image/" + "/".join(quote(p, safe="") for p in parts)
+
+
 def append_new_rows(wb: Workbook, items: list, highlight: bool = True) -> int:
     """Append rows for NewImage items (file_name / url_used must be set). Returns rows written."""
     if not items:
@@ -165,9 +178,10 @@ def append_new_rows(wb: Workbook, items: list, highlight: bool = True) -> int:
             cell._style = copy(styles[name])
             if highlight and name in IMG_COLS:
                 cell.fill = NEW_ROW_FILL
-        # the existing rows link the hotel page and the image URL - keep that behaviour
+        # the existing rows link the hotel page, the image URL and the local file - keep that behaviour
         ws.cell(r, h["Booking.com Hotel Page"]).hyperlink = it.page_url
         ws.cell(r, h["Booking.com Image URL"]).hyperlink = it.url_used or it.url
+        ws.cell(r, h["Local File"]).hyperlink = local_file_link(it.folder, it.file_name)
     if ws.auto_filter and ws.auto_filter.ref:        # the original filter stops mid-table; cover all rows
         ws.auto_filter.ref = f"A1:{ws.cell(1, ws.max_column).column_letter}{r}"
     return r - last
@@ -217,7 +231,7 @@ def verify(src_path: str, out_path: str, expected_new: int) -> list:
         problems.append(f"expected {expected_new} new rows, output has {n_new - n_old}")
     ncol = len(IMG_COLS)
     ha = _header_map(wa, IMG_COLS, IMAGES_SHEET)
-    link_cols = (ha["Booking.com Hotel Page"], ha["Booking.com Image URL"])
+    link_cols = (ha["Booking.com Hotel Page"], ha["Booking.com Image URL"], ha["Local File"])
     for r in range(1, n_old + 1):
         for col in range(1, ncol + 1):
             ca, cb = wa.cell(r, col), wb_.cell(r, col)

@@ -6,6 +6,7 @@ from bsync.diff import DiffConfig, diff_hotel
 from bsync.model import Group, HotelIndex, HotelScrape, ScrapedImage
 from bsync.scraper import assemble, clean_caption, extract_embedded, with_dates
 from bsync.util import norm_category, photo_id, sanitize_segment, size_score, to_large
+from bsync.workbook import local_file_link
 
 URL = "https://www.booking.com/hotel/de/x.de.html"
 OTHER = "https://www.booking.com/hotel/de/y.de.html"
@@ -58,6 +59,17 @@ class UtilTests(unittest.TestCase):
         self.assertEqual(sanitize_segment("Standard Queen Room with Bath/Shower"), "Standard Queen Room with Bath-Shower")
         self.assertEqual(sanitize_segment('A: "B"? '), "A- -B--")
         self.assertEqual(sanitize_segment("Studio-Apartment (2 Erwachsene)"), "Studio-Apartment (2 Erwachsene)")
+
+    def test_local_file_link_matches_existing_rows(self):
+        # row 2 of the real workbook, verbatim
+        self.assertEqual(
+            local_file_link("novum-hotels-images/Garner Hotel Berlin - Schöneberg/General Images",
+                            "01_702878002.jpg"),
+            "image/Garner%20Hotel%20Berlin%20-%20Sch%C3%B6neberg/General%20Images/01_702878002.jpg")
+        # legacy folder name with size token, and ² encoded
+        self.assertEqual(
+            local_file_link("novum-hotels-images/Hotel X/Standardzimmer - 12 m²", "03_10.jpg"),
+            "image/Hotel%20X/Standardzimmer%20-%2012%20m%C2%B2/03_10.jpg")
 
     def test_norm_category_keeps_size(self):
         self.assertEqual(norm_category("Standardzimmer – Nebengebäude"), norm_category("standardzimmer - nebengebäude"))

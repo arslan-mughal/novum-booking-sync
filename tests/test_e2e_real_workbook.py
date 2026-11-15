@@ -14,6 +14,7 @@ import unittest
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 from openpyxl import load_workbook
 
@@ -175,10 +176,15 @@ class EndToEnd(unittest.TestCase):
         row_no = next(r for r in range(old_last + 1, ws.max_row + 1) if "9000001" in str(ws.cell(r, 9).value))
         self.assertEqual(ws.cell(row_no, 3).hyperlink.target, h28.page_url)
         self.assertIn("9000001", ws.cell(row_no, 7).hyperlink.target)
+        # new rows link the local file exactly like the existing rows do
+        expect_local = "image/" + "/".join(quote(p, safe="") for p in
+                                           gen.folder.split("/")[1:] + [f"{gen.max_no + 1:02d}_9000001.jpg"])
+        self.assertEqual(ws.cell(row_no, 9).hyperlink.target, expect_local)
         self.assertEqual(ws.cell(row_no, 1).fill.fgColor.rgb[-6:], "FFF2CC")
         # style copied from the last existing row (column I is blue in the original)
         self.assertEqual(ws.cell(row_no, 9).font.color.rgb, ws.cell(old_last, 9).font.color.rgb)
-        self.assertEqual(ws.cell(row_no, 9).font.name, "Calibri")
+        # the source row carries no explicit font name (Excel's default Calibri), so the copy has none either
+        self.assertIn(ws.cell(row_no, 9).font.name, (None, "Calibri"))
         # log tab
         log = wb[W.LOG_SHEET]
         rows = list(log.iter_rows(min_row=2, values_only=True))
