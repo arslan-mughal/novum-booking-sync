@@ -104,6 +104,18 @@ class DiffTests(unittest.TestCase):
         self.assertEqual([(n.pid, n.category, n.also_elsewhere) for n in d.new_images],
                          [("10", "Premium Zimmer", True)])
 
+    def test_json_source_never_refiles_a_photo_the_workbook_already_holds(self):
+        # the embedded-gallery JSON lists rooms by Booking's current assignment, which disagrees
+        # with the workbook's historical lightbox filing for some known photos: those must not
+        # come back as "new" rows under another room. A genuinely new photo still gets a row
+        # under each of its rooms.
+        sc = scrape(("1", None), ("2", None), ("3", None), ("10", "Standardzimmer (12 m²)"),
+                    ("11", "Standardzimmer (12 m²)"), ("20", "Premium Zimmer"),
+                    ("10", "Premium Zimmer"), ("200", "Premium Zimmer"))
+        sc.json_source = True
+        d = run(make_index(), sc)
+        self.assertEqual([(n.pid, n.category) for n in d.new_images], [("200", "Premium Zimmer")])
+
     def test_new_room_category_gets_sanitised_folder_and_numbering_from_one(self):
         d = run(make_index(), scrape(("1", None), ("2", None), ("3", None), ("10", "Standardzimmer (12 m²)"),
                                      ("11", "Standardzimmer (12 m²)"), ("20", "Premium Zimmer"),
@@ -224,6 +236,76 @@ class EmbeddedTests(unittest.TestCase):
         self.assertEqual(clean_caption("Lobby mit Rezeption", "Hotel X"), "Lobby mit Rezeption")
         self.assertIn("checkin=2027-01-10", with_dates(URL, "2027-01-10", "2027-01-11"))
         self.assertEqual(with_dates(URL, None, None), URL)
+
+
+class GalleryJsonTests(unittest.TestCase):
+    """The embedded-gallery path (v1.0.2): RoomDetails + propertyGallery Apollo JSON."""
+
+    def page(self):
+        # minimal Apollo-style cache: 2 rooms (one name carries the 'bis zu N Erwachsene'
+        # suffix Booking appends in the room table) + a 3-photo main gallery
+        data = {
+            "RoomDetails:11": {"__typename": "RoomDetails", "id": 11,
+                               "translations": {"__typename": "RoomTranslation",
+                                                "name": "Standard Zimmer mit Queensize-Bett"},
+                               "roomSizeM2": 12,
+                               "roomPhotos": [{"__ref": "RDSRoomPhoto:101"},
+                                              {"__ref": "RDSRoomPhoto:102"}]},
+            "RoomDetails:22": {"__typename": "RoomDetails", "id": 22,
+                               "translations": {"__typename": "RoomTranslation",
+                                                "name": "Premium-Zimmer mit 3 Einzelbetten – bis zu 3 Erwachsene"},
+                               "roomSizeM2": 27,
+                               "roomPhotos": [{"__ref": "RDSRoomPhoto:102"},
+                                              {"__ref": "RDSRoomPhoto:103"}]},
+            "Property:1": {"propertyGallery({\"limit\":500})": {
+                "__typename": "PropertyGallery",
+                "mainPhoto": {"__ref": "AccommodationPhoto:101"},
+                "mainGalleryPhotos": [{"__ref": "AccommodationPhoto:101"},
+                                      {"__ref": "AccommodationPhoto:102"},
+                                      {"__ref": "AccommodationPhoto:103"}]}},
+            "AccommodationPhoto:101": {"__typename": "AccommodationPhoto", "id": 101,
+                                       "altText": "Lobby",
+                                       "resource({\"size\":\"max1024x768\"})": {
+                                           "__typename": "PhotoResource",
+                                           "absoluteUrl": cdn("101")}},
+            "AccommodationPhoto:102": {"__typename": "AccommodationPhoto", "id": 102,
+                                       "altText": "Zimmer",
+                                       "resource({\"size\":\"max300\"})": {
+                                           "__typename": "PhotoResource",
+                                           "absoluteUrl": cdn("102", "max300")}},
+            "AccommodationPhoto:103": {"__typename": "AccommodationPhoto", "id": 103,
+                                       "altText": "Bad",
+                                       "resource({\"size\":\"max1024x768\"})": {
+                                           "__typename": "PhotoResource",
+                                           "absoluteUrl": cdn("103")}},
+        }
+        import json as _json
+        return '<script type="application/json">' + _json.dumps(data) + "</script>"
+
+    def test_room_details_give_sized_names_and_gallery_order(self):
+        emb = extract_embedded(self.page())
+        self.assertEqual(emb.gallery_pids, ["101", "102", "103"])
+        self.assertEqual(emb.room_details,
+                         {"11": "Standard Zimmer mit Queensize-Bett (12 m²)",
+                          "22": "Premium-Zimmer mit 3 Einzelbetten (27 m²)"})
+        self.assertEqual(emb.room_photos, {"11": ["101", "102"], "22": ["102", "103"]})
+
+    def test_assemble_from_gallery_tags_rooms_and_leaves_the_rest_untagged(self):
+        from bsync.scraper import assemble_from_gallery
+        emb = extract_embedded(self.page())
+        out = assemble_from_gallery(emb)
+        got = sorted((i.category or "-", i.pid) for i in out)
+        # 102 belongs to both rooms -> one row per room; nothing is left untagged here
+        self.assertEqual(got, [("Premium-Zimmer mit 3 Einzelbetten (27 m²)", "102"),
+                               ("Premium-Zimmer mit 3 Einzelbetten (27 m²)", "103"),
+                               ("Standard Zimmer mit Queensize-Bett (12 m²)", "101"),
+                               ("Standard Zimmer mit Queensize-Bett (12 m²)", "102")])
+        self.assertTrue(next(i for i in out if i.pid == "102").url.endswith("max300/102.jpg?k=abc123&o="))
+
+    def test_no_gallery_json_means_empty_so_the_dom_fallback_runs(self):
+        from bsync.scraper import assemble_from_gallery
+        emb = extract_embedded('<script type="application/json">{"a": 1}</script>')
+        self.assertEqual(assemble_from_gallery(emb), [])
 
 
 if __name__ == "__main__":

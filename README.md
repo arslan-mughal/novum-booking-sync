@@ -8,10 +8,14 @@ Visits every Booking.com hotel link in the **NOVUM-Hotels** tab, finds photos th
 
 > **Read this first - what is and isn't verified**
 > The comparison, numbering, folder naming, downloading and workbook update are tested end-to-end against
-> your real workbook. The **Booking.com browser layer could not be tested against the live site** (it was
-> built where booking.com is unreachable); its mechanics are tested on a mock page only. Booking changes its
-> markup and uses a bot check, so expect to adjust selectors once - that is what the workflow below is for,
-> and the safety gates stop a mis-reading from touching your workbook.
+> your real workbook. **v1.0.2 (15 Nov 2026): the scraper now reads the gallery from the data embedded in
+> the page** (Booking's own gallery JSON: room names + sizes + photos), because the photo pop-ups stopped
+> opening in the browser - the gallery viewer is now a fullscreen "cinema" overlay, not a `role="dialog"`
+> pop-up, so the old click-and-wait approach found nothing. This was verified against a real saved page
+> (Garner Hotel Berlin - Schöneberg): the JSON re-finds all 93 known photos (coverage 100%) with every
+> room resolving onto its existing workbook category. If a page carries no gallery JSON, the tool falls
+> back to clicking the pop-ups (selectors in `bsync\scraper.py` -> `SELECTORS`). The live browser run
+> itself (all 126 hotels) is still untested - run one hotel first, as below.
 
 ## Setup (PowerShell)
 
@@ -58,7 +62,7 @@ re-opens both files and proves no existing cell, hyperlink or comment changed.
 
 ## How "new" is decided
 Identity = Booking **photo id** (the number in `01_702878002.jpg` and in the URL).
-* Room photo is new if that room category does not yet contain that photo id (same photo in another room = new row for that room, as your sheet already does).
+* Room photo is new if that room category does not yet contain that photo id (same photo in another room = new row for that room, as your sheet already does). **Exception for the embedded-gallery path:** Booking's gallery JSON lists rooms by its current assignment, which disagrees with the workbook's historical lightbox filing for some photos that are already filed somewhere for the hotel - those are *not* re-filed under another room. Only a photo id the hotel doesn't hold at all gets new rows (under every room the JSON lists it in). Your original filing stands.
 * A gallery photo that belongs to no room is new if the id isn't filed **anywhere** for that hotel. It is filed under `General Images` (change with `--untagged-category "Gallery Only - No Room"`).
 * Existing rows/files are never renamed or renumbered; new images continue each group's `Image No.`.
 * New folders: `novum-hotels-images/<hotel>/<room>` with `/` -> `-` (your existing rule). Existing groups reuse the folder already in the sheet (so legacy names like `... - 12 m²` keep working).

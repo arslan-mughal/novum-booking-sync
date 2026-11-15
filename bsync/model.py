@@ -29,6 +29,12 @@ class HotelScrape:
     notes: list[str] = field(default_factory=list)
     diagnostics: dict = field(default_factory=dict)
     scraped_at: str = ""
+    json_source: bool = False
+    # True when the images came from the page's embedded gallery JSON (v1.0.2+) rather than
+    # from the photo pop-ups. The JSON room lists are Booking's current assignment and disagree
+    # with the workbook's historical lightbox filing for some already-known photos, so diff.py
+    # only adds rows for photos that are genuinely new to the hotel (under all their rooms);
+    # it never re-files a photo the workbook already holds somewhere else.
 
     def to_dict(self) -> dict:
         return asdict(self)

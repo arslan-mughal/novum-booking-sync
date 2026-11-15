@@ -9,7 +9,11 @@ IMPORTANT - what is verified and what is not:
   * Whatever the scraper finds is cross-checked by diff.py against the ~13.8k images you already have, so a
     broken selector shows up as LOW_COVERAGE / ROOMS_MISSING instead of silently wrong rows.
 
-What counts as a hotel photo on a page:
+What counts as a hotel photo on a page (primary path, since v1.0.2):
+  * the page's embedded gallery JSON (Apollo cache): propertyGallery.mainGalleryPhotos
+    is the whole gallery in page order, and each RoomDetails node gives its room's exact
+    name + size + photos. No clicking needed, so a changed photo viewer cannot break it.
+  Fallback (when the page carries no gallery JSON): the old rules -
   * a photo seen in THIS hotel's gallery pop-up (untagged unless it is also tagged to a room), or
   * a photo shown inside a room's own pop-up, or tagged to a room in the page's embedded JSON.
   Photos that merely appear somewhere on the page (e.g. 'similar properties') are ignored.
@@ -37,8 +41,10 @@ SELECTORS = {
     "overlay_close": ["[role='dialog'] button[aria-label*='Dismiss' i]",
                       "[role='dialog'] button[aria-label*='schließen' i]",
                       "button[aria-label*='Anmeldeinformationen' i]"],
-    # elements that open the hotel's photo gallery pop-up
-    "gallery_open": ["[data-testid='GalleryGridViewDesktop-wrapper'] img", "a.bh-photo-grid-item",
+    # elements that open the hotel's photo gallery pop-up (fallback path only; the embedded
+    # gallery JSON is tried first - see scrape()). GalleryUnifiedDesktop replaced GalleryGridView.
+    "gallery_open": ["[data-testid='GalleryUnifiedDesktop-wrapper'] img",
+                     "[data-testid='GalleryGridViewDesktop-wrapper'] img", "a.bh-photo-grid-item",
                      ".bh-photo-grid img", "#photo_wrapper img", "[data-testid*='gallery' i] img",
                      "[data-testid*='photo' i] img"],
     # the pop-up container
@@ -113,8 +119,15 @@ class PhotoRec:
 @dataclass
 class Embedded:
     photos: dict = field(default_factory=dict)     # pid -> PhotoRec
-    rooms: dict = field(default_factory=dict)      # room id -> room name
+    rooms: dict = field(default_factory=dict)      # room id -> room name (best-effort, from any JSON node)
     stats: dict = field(default_factory=dict)
+    # Structured gallery data (Booking's own Apollo cache) - the primary source since Nov 2026,
+    # when the photo pop-ups stopped opening in the browser. RoomDetails nodes carry the exact
+    # room name + size, e.g. "Standard Zimmer mit Queensize-Bett (12 m²)", which is exactly how
+    # the workbook's room categories are named.
+    room_details: dict = field(default_factory=dict)   # room id -> sized category name
+    room_photos: dict = field(default_factory=dict)    # room id -> [pid, ...] in gallery order
+    gallery_pids: list = field(default_factory=list)   # main gallery pids, in page order
 
     def room_names_for(self, rec: PhotoRec) -> list:
         names = []
@@ -150,9 +163,51 @@ def _scalar_refs(v) -> list:
     return out
 
 
+def _ref_pid(ref) -> Optional[str]:
+    """Photo id from an Apollo reference such as {'__ref': 'AccommodationPhoto:702878002'}."""
+    if isinstance(ref, dict) and isinstance(ref.get("__ref"), str):
+        m = re.match(r"(?:AccommodationPhoto|RDSRoomPhoto|RoomPhoto):(\d+)$", ref["__ref"])
+        if m:
+            return m.group(1)
+    return None
+
+
+def _sized_room_name(name: str, size_m2) -> str:
+    """'Premium Zimmer' + 28 -> 'Premium Zimmer (28 m²)'. Also drops Booking's trailing
+    '– bis zu N Erwachsene' suffix, which the workbook's categories never carry."""
+    name = (name or "").replace("\u00a0", " ")
+    name = re.sub(r"\s+", " ", name).strip()
+    name = re.sub(r"\s+[–—-]\s+bis zu\s+\d+\s+Erwachsene\s*$", "", name).strip()
+    if not name:
+        return ""
+    try:
+        size = int(size_m2)
+    except (TypeError, ValueError):
+        return name
+    return f"{name} ({size} m²)"
+
+
 def _walk(node, path: tuple, emb: Embedded):
     if isinstance(node, dict):
         typename = str(node.get("__typename", ""))
+        # --- structured gallery: RoomDetails nodes (exact name + size + its photos) ---
+        if typename == "RoomDetails":
+            rid = str(node.get("id", "") or "")
+            tr = node.get("translations") or {}
+            sized = _sized_room_name(tr.get("name", ""), node.get("roomSizeM2"))
+            if rid and sized:
+                emb.room_details[rid] = sized
+            pids = [_ref_pid(r) for r in (node.get("roomPhotos") or [])]
+            pids = [p for p in pids if p]
+            if rid and pids:
+                emb.room_photos[rid] = pids
+        # --- structured gallery: the propertyGallery node (main gallery, in page order) ---
+        for k, v in node.items():
+            if k.startswith("propertyGallery(") and isinstance(v, dict):
+                for r in (v.get("mainGalleryPhotos") or []):
+                    pid = _ref_pid(r)
+                    if pid and pid not in emb.gallery_pids:
+                        emb.gallery_pids.append(pid)
         urls = [v for v in node.values() if isinstance(v, str) and PHOTO_RE.search(v)]
         if urls:
             best = max((PHOTO_RE.search(u).group(0) for u in urls), key=size_score)
@@ -195,7 +250,8 @@ def extract_embedded(html_text: str) -> Embedded:
         _walk(data, (), emb)
     tagged = sum(1 for r in emb.photos.values() if emb.room_names_for(r))
     emb.stats = {"json_blocks": n_blocks, "photos": len(emb.photos), "rooms": len(emb.rooms),
-                 "photos_tagged_to_rooms": tagged}
+                 "photos_tagged_to_rooms": tagged,
+                 "gallery_pids": len(emb.gallery_pids), "gallery_rooms": len(emb.room_details)}
     return emb
 
 
@@ -238,6 +294,35 @@ def assemble(emb: Embedded, gallery: "OrderedDict", rooms_dom: list) -> list:
         out.append(ScrapedImage(pid=pid, url=_best(url, emb.photos[pid].url if pid in emb.photos else ""),
                                 category=None, caption=alt, order=-1000000 + i))
     return out + list(tagged.values())
+
+
+def assemble_from_gallery(emb: Embedded) -> list:
+    """Build the scrape from the page's embedded gallery data (RoomDetails + propertyGallery),
+    with no clicking at all. Returns [] when the page carries no usable gallery JSON, in which
+    case the caller falls back to harvesting the DOM photo pop-ups.
+
+    Room names come out exactly as the workbook files them ('Name (N m²)'), so diff.py's
+    exact-match path applies and no renamed-room guessing is needed. Photos in the main gallery
+    that belong to no room become untagged gallery photos, as before."""
+    if not emb.gallery_pids or not emb.room_details:
+        return []
+    gallery: "OrderedDict[str, tuple]" = OrderedDict()
+    for pid in emb.gallery_pids:
+        rec = emb.photos.get(pid)
+        if rec and rec.url:
+            gallery[pid] = (rec.url, rec.caption)
+    rooms_dom = []
+    for rid, name in emb.room_details.items():
+        photos: "OrderedDict[str, tuple]" = OrderedDict()
+        for pid in emb.room_photos.get(rid, []):
+            rec = emb.photos.get(pid)
+            if rec and rec.url:
+                photos[pid] = (rec.url, rec.caption)
+        if photos:
+            rooms_dom.append((name, photos))
+    if not gallery and not rooms_dom:
+        return []
+    return assemble(emb, gallery, rooms_dom)
 
 
 def clean_caption(alt: str, hotel_hint: str = "") -> str:
@@ -512,11 +597,25 @@ class BookingBrowser:
                 (self.debug_dir / f"{sr:03d}_page.html").write_text(html_text, encoding="utf-8")
             emb = extract_embedded(html_text)
             diag = {"embedded": emb.stats}
-            gallery = self._harvest_gallery(page, sr, diag)
-            diag["gallery_photos"] = len(gallery)
-            rooms = self._harvest_rooms(page, sr, diag)
+            images = assemble_from_gallery(emb)
+            if images:
+                # Primary path (since Nov 2026): the page carries its whole gallery as embedded
+                # JSON - RoomDetails (exact room name + size + photos) and propertyGallery
+                # (main gallery in page order). No pop-up clicking needed, so a changed photo
+                # viewer can no longer break the scrape.
+                diag["gallery_source"] = "embedded-json"
+                diag["gallery_photos"] = len(emb.gallery_pids)
+                diag["room_popups_opened"] = len(emb.room_details)
+                diag["room_links"] = len(emb.room_details)
+                res.json_source = True
+                res.images = images
+            else:
+                # Fallback: harvest the gallery and room photo pop-ups in the browser.
+                gallery = self._harvest_gallery(page, sr, diag)
+                diag["gallery_photos"] = len(gallery)
+                rooms = self._harvest_rooms(page, sr, diag)
+                res.images = assemble(emb, gallery, rooms)
             res.diagnostics = diag
-            res.images = assemble(emb, gallery, rooms)
             for im in res.images:
                 im.caption = clean_caption(im.caption, hotel_name)
             res.status = "OK" if res.images else "NO_PHOTOS"

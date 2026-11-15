@@ -115,6 +115,11 @@ def diff_hotel(index: HotelIndex, scrape: HotelScrape, cfg: DiffConfig,
             grp = index.groups.get(cat)
             if grp and im.pid in grp.pids:
                 continue
+            if scrape.json_source and im.pid in existing:
+                # embedded-JSON scrape: the photo is already filed somewhere for this hotel,
+                # only under a different room than Booking's gallery JSON now lists it. The
+                # workbook's original filing stands; a sync adds genuinely new photos only.
+                continue
         else:
             cat, kind = cfg.untagged_category, "untagged"
             if im.pid in existing:
