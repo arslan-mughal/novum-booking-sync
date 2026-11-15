@@ -33,6 +33,9 @@ jobs:
       ONEDRIVE_IMAGES_FOLDER: ${{ vars.ONEDRIVE_IMAGES_FOLDER }}   # folder that CONTAINS the 'image' folder (default: the workbook's folder)
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
       ONLY: ${{ inputs.only }}
+      ONEDRIVE_DRIVE_ID: ${{ vars.ONEDRIVE_DRIVE_ID }}
+      MS_SCOPE: ${{ vars.MS_SCOPE }}
+
     steps:
       - uses: actions/checkout@v4
 
