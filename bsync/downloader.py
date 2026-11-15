@@ -1,4 +1,6 @@
-"""Download new images into <images_root>/<Local Folder>/<NN>_<photoId>.<ext>."""
+"""Download new images into <images_root>/image/<hotel>/<room>/<NN>_<photoId>.<ext> - the
+'Local Folder' value still names the legacy 'novum-hotels-images/' root, so it is translated
+with workbook.disk_folder first (the workbook's hyperlinks point at 'image/...')."""
 from __future__ import annotations
 
 import os
@@ -10,6 +12,7 @@ from pathlib import Path
 import requests
 
 from .util import url_ext
+from .workbook import disk_folder
 
 HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -51,7 +54,7 @@ def download_one(item, root: Path, session: requests.Session, force: bool = Fals
     for u in (item.url_large, item.url):
         if u not in candidates:
             candidates.append(u)
-    folder = root / Path(*item.folder.split("/"))
+    folder = root / Path(*disk_folder(item.folder).split("/"))
     errors = []
     for u in candidates:
         name = item.planned_file_name(url_ext(u))

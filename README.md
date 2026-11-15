@@ -8,7 +8,9 @@ Visits every Booking.com hotel link in the **NOVUM-Hotels** tab, finds photos th
 
 > **Read this first - what is and isn't verified**
 > The comparison, numbering, folder naming, downloading and workbook update are tested end-to-end against
-> your real workbook. **v1.0.3 (15 Nov 2026):** the room-name mapping now also matches on the base name
+> your real workbook. **v1.0.4 (15 Nov 2026):** new photos are written under `image/<hotel>/<room>/` next to the workbook -
+both locally and on OneDrive - because that is where the workbook's 'Local File' hyperlinks point; the
+'Local Folder' column still names the legacy `novum-hotels-images/` root. **v1.0.3 (15 Nov 2026):** the room-name mapping now also matches on the base name
 > when only the size suffix differs ('Standardzimmer' in the workbook = 'Standardzimmer (12 m²)' on the
 > page) - the workbook filed some hotels' rooms without sizes, and without this the sync created a
 > duplicate room folder next to the existing one. **v1.0.2:** the scraper reads the gallery from the data
@@ -60,7 +62,8 @@ python sync_booking_images.py --workbook "C:\path\...xlsx"
 ```
 
 Output: `NOVUM_..._updated.xlsx` next to the original (**the original is never modified**). Images go to
-`<folder of the workbook>\novum-hotels-images\...` (change with `--images-root`). After saving, the tool
+`<folder of the workbook>\image\<hotel>\<room>\` - the same place the workbook's 'Local File'
+hyperlinks point (change with `--images-root`). After saving, the tool
 re-opens both files and proves no existing cell, hyperlink or comment changed.
 
 ## How "new" is decided
@@ -68,7 +71,7 @@ Identity = Booking **photo id** (the number in `01_702878002.jpg` and in the URL
 * Room photo is new if that room category does not yet contain that photo id (same photo in another room = new row for that room, as your sheet already does). **Exception for the embedded-gallery path:** Booking's gallery JSON lists rooms by its current assignment, which disagrees with the workbook's historical lightbox filing for some photos that are already filed somewhere for the hotel - those are *not* re-filed under another room. Only a photo id the hotel doesn't hold at all gets new rows (under every room the JSON lists it in). Your original filing stands.
 * A gallery photo that belongs to no room is new if the id isn't filed **anywhere** for that hotel. It is filed under `General Images` (change with `--untagged-category "Gallery Only - No Room"`).
 * Existing rows/files are never renamed or renumbered; new images continue each group's `Image No.`.
-* New folders: `novum-hotels-images/<hotel>/<room>` with `/` -> `-` (your existing rule). Existing groups reuse the folder already in the sheet (so legacy names like `... - 12 m²` keep working).
+* New folders: `image/<hotel>/<room>` next to the workbook, with `/` -> `-` (your existing rule). Existing groups reuse the folder already in the sheet (so legacy names like `... - 12 m²` keep working). The workbook's 'Local Folder' column still shows the legacy `novum-hotels-images/<hotel>/<room>` value; the file itself is written under `image/`, where the 'Local File' hyperlink points.
 * Renamed rooms (same photos, similar name) are mapped onto the existing category and noted in the log instead of creating a duplicate.
 * Photos that Booking removed are only counted ("Existing Not On Page"); rows are never deleted.
 

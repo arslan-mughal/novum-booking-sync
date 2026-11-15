@@ -144,6 +144,19 @@ def _last_data_row(ws) -> int:
     return r
 
 
+def disk_folder(folder: str) -> str:
+    """'Local Folder' value as a path relative to the workbook's folder: the workbook's
+    'Local File' hyperlinks point at 'image/<hotel>/<room>/<file>', so that is where the file
+    must actually be written - not under the legacy 'novum-hotels-images/' root the column
+    still names. Same translation as local_file_link, without URL-encoding."""
+    parts = [p for p in (folder or "").split("/") if p]
+    if parts and parts[0] == DEFAULT_ROOT:
+        parts = parts[1:]
+    if parts and parts[0] == "image":
+        return "/".join(parts)
+    return "image/" + "/".join(parts)
+
+
 def local_file_link(folder: str, file_name: str) -> str:
     """Relative link for a new row's 'Local File' cell, matching the existing rows exactly:
     ``image/<hotel>/<room>/<file>`` with every segment URL-encoded (spaces, ö, ², ...).

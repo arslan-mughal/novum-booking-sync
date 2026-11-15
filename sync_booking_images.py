@@ -31,7 +31,7 @@ log = logging.getLogger("sync")
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--workbook", required=True, help="the .xlsx with tabs 'NOVUM-Hotels' and 'Images - Booking.com'")
-    p.add_argument("--images-root", help="folder that CONTAINS 'novum-hotels-images' (default: the workbook's folder)")
+    p.add_argument("--images-root", help="folder that CONTAINS the 'image' folder (default: the workbook's folder)")
     p.add_argument("--out", help="output workbook (default: <name>_updated.xlsx next to the input; never overwrites the input)")
     p.add_argument("--run-dir", default="sync_run", help="scrape cache, reports, log, browser profile (default ./sync_run)")
     p.add_argument("--only", action="append", default=[],
@@ -248,7 +248,7 @@ def main(argv=None, hooks: Hooks = None) -> int:
         h = W._header_map(ws, W.IMG_COLS, W.IMAGES_SHEET)
         for row in ws.iter_rows(min_row=2, values_only=True):
             f, fo = row[h["Local File"] - 1], row[h["Local Folder"] - 1]
-            if f and fo and not (root / Path(*str(fo).split("/")) / str(f)).exists():
+            if f and fo and not (root / Path(*W.disk_folder(str(fo)).split("/")) / str(f)).exists():
                 miss.append([row[h["Sr."] - 1], row[h["Hotel Name"] - 1], fo, f])
         write_csv(run_dir / "missing_local_files.csv", ["Sr.", "Hotel", "Local Folder", "Local File"], miss)
         log.info(f"audit: {len(miss)} existing rows have no file under {root} -> missing_local_files.csv")
@@ -266,7 +266,7 @@ def main(argv=None, hooks: Hooks = None) -> int:
     failed: dict = {}
     to_write = all_new
     if all_new and not a.no_download:
-        log.info(f"downloading {len(all_new)} images into {root / images_root_name}")
+        log.info(f"downloading {len(all_new)} images into {root / 'image'}")
         results = download_all(all_new, root, log=log.info)
         to_write = [n for n in all_new if results[id(n)][0]]
         for n in all_new:

@@ -6,7 +6,7 @@
 OneDrive workbook ──download──▶ check Booking.com (stalest hotels first)
                                    │ new photos
                                    ▼
-        OneDrive: <folder>/novum-hotels-images/<hotel>/<room>/NN_<id>.jpg   (same structure as today)
+        OneDrive: <folder>/image/<hotel>/<room>/NN_<id>.jpg   (where the workbook's 'Local File' hyperlinks point)
         OneDrive: workbook replaced (new rows appended + "Update Log" tab)   ← only if nobody edited it meanwhile
         OneDrive: <folder>/sync-reports/<date>/  hotels_report.csv, new_images.csv, sync.log
 ```
@@ -54,11 +54,11 @@ Repository → *Settings → Secrets and variables → Actions*:
 | `MS_CLIENT_SECRET` | secret | mode A only |
 | `MS_REFRESH_TOKEN` | secret | mode B only (printed by `login_device.py`) |
 | `GH_PAT` | secret, optional | mode B on a hosted runner: fine-grained token with *Secrets: read & write* on this repo, so the workflow can store the renewed refresh token. Not needed on a self-hosted runner/own PC (the token file persists in `sync_run/token.json`). |
-| `ONEDRIVE_WORKBOOK_PATH` | variable | e.g. `NOVUM/NOVUM_Hospitality_Hotels_with_Booking_Images.xlsx` |
-| `ONEDRIVE_IMAGES_FOLDER` | variable, optional | folder that **contains** `novum-hotels-images` (default: the workbook's folder) |
+| `ONEDRIVE_WORKBOOK_PATH` | variable | e.g. `NOVUM_Hotels_All_Booking_Images/NOVUM_Hospitality_Hotels_with_Booking_Images.xlsx` |
+| `ONEDRIVE_IMAGES_FOLDER` | variable, optional | folder that **contains** the `image` folder (default: the workbook's folder) - new photos are uploaded under `<folder>/image/<hotel>/<room>/`, exactly where the workbook's 'Local File' hyperlinks point |
 | `ONEDRIVE_USER` | variable | mode A: e-mail of the OneDrive owner |
 
-Put your existing workbook (and, if you want, your existing image folder) at those OneDrive paths. The workbook's `Local Folder` column already says `novum-hotels-images/<hotel>/<room>`, so new images land next to the old ones.
+Put your existing workbook and your existing `image` folder at those OneDrive paths (workbook next to the `image` folder). New photos are uploaded under `<folder>/image/<hotel>/<room>/`, next to the old ones, exactly where the workbook's 'Local File' hyperlinks point.
 
 ## 4. First run
 Actions → *Booking image sync* → *Run workflow* → keep **dry_run = true**, optionally `only = 28` → open OneDrive `…/sync-reports/<date>/hotels_report.csv`. A healthy hotel shows Status OK and coverage near 100%. If not, see the "Booking.com layer" section of `README.md` (selectors; run it locally with `--debug` to see screenshots). Then run again with dry_run = false, or just wait for the schedule (edit the `cron:` line for weekly/monthly).

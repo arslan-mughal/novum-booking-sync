@@ -30,7 +30,7 @@ jobs:
       GH_PAT: ${{ secrets.GH_PAT }}                            # optional, only to store the rotated refresh token
       ONEDRIVE_USER: ${{ vars.ONEDRIVE_USER }}                 # app-only mode: e-mail of the drive owner
       ONEDRIVE_WORKBOOK_PATH: ${{ vars.ONEDRIVE_WORKBOOK_PATH }}   # e.g. NOVUM/NOVUM_Hospitality_Hotels_with_Booking_Images.xlsx
-      ONEDRIVE_IMAGES_FOLDER: ${{ vars.ONEDRIVE_IMAGES_FOLDER }}   # folder that CONTAINS 'novum-hotels-images' (default: the workbook's folder)
+      ONEDRIVE_IMAGES_FOLDER: ${{ vars.ONEDRIVE_IMAGES_FOLDER }}   # folder that CONTAINS the 'image' folder (default: the workbook's folder)
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
       ONLY: ${{ inputs.only }}
     steps:

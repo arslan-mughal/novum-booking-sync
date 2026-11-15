@@ -143,16 +143,16 @@ class EndToEnd(unittest.TestCase):
 
         root = self.wb_path.parent
         h28 = self.index[self.hotels[28].page_url]
-        legacy_folder = root / Path(*h28.groups[legacy_cat].folder.split("/"))
+        legacy_folder = root / Path(*W.disk_folder(h28.groups[legacy_cat].folder).split("/"))
         self.assertTrue((legacy_folder / f"{h28.groups[legacy_cat].max_no + 1:02d}_9000003.jpg").exists(),
                         "fallback to max300 + legacy folder reuse")
         self.assertTrue(legacy_folder.name.endswith("- 12 m²"))
         gen = h28.groups["General Images"]
         for k, pid in enumerate((9000001, 9000002), start=1):
-            self.assertTrue((root / Path(*gen.folder.split("/")) / f"{gen.max_no + k:02d}_{pid}.jpg").exists())
+            self.assertTrue((root / Path(*W.disk_folder(gen.folder).split("/")) / f"{gen.max_no + k:02d}_{pid}.jpg").exists())
         # new room category with slash -> sanitised folder
         sl = self.index[self.hotels[slash].page_url]
-        new_folder = root / Path(*sl.hotel_folder.split("/")) / "Suite mit Bad-Dusche (35 m²)"
+        new_folder = root / Path(*W.disk_folder(sl.hotel_folder).split("/")) / "Suite mit Bad-Dusche (35 m²)"
         self.assertEqual(sorted(p.name for p in new_folder.iterdir()), ["01_9000020.jpg", "02_9000021.jpg"])
         # failed download stays out
         self.assertFalse(list(root.rglob("*9000099*")))

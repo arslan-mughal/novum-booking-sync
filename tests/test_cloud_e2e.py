@@ -35,6 +35,16 @@ class OrderAndLoginTests(unittest.TestCase):
         hs = [HotelRow(1, "a", "u1"), HotelRow(2, "b", "u2"), HotelRow(3, "c", "u3")]
         self.assertEqual([h.sr for h in hooks.order_hotels(hs)], [3, 2, 1])      # never-checked, oldest, newest
 
+    def test_remote_folder_mirrors_the_workbook_hyperlinks(self):
+        # Local Folder values start with the images root; on OneDrive the hotel folders live
+        # under 'image/...' next to the workbook, exactly where the 'Local File' hyperlinks point.
+        self.assertEqual(C.remote_folder("novum-hotels-images/Garner Hotel Berlin - Schöneberg/General Images"),
+                         "image/Garner Hotel Berlin - Schöneberg/General Images")
+        self.assertEqual(C.remote_folder("novum-hotels-images/Hotel X/Suite - 19 m²"),
+                         "image/Hotel X/Suite - 19 m²")
+        self.assertEqual(C.remote_folder("image/Hotel X/General Images"),
+                         "image/Hotel X/General Images")
+
     def test_device_login_flow(self):
         cloud = M.FakeCloud()
         srv, url = M.start(cloud)
@@ -113,10 +123,10 @@ class CloudEndToEnd(unittest.TestCase):
         self.assertEqual(rc, 0)
         files = self.cloud.files
         gen = h28.groups["General Images"]
-        p_gen = f"NOVUM/{gen.folder}/{gen.max_no + 1:02d}_9100001.jpg"
-        p_leg = f"NOVUM/{h28.groups[legacy_cat].folder}/{h28.groups[legacy_cat].max_no + 1:02d}_9100002.jpg"
+        p_gen = f"NOVUM/{C.remote_folder(gen.folder)}/{gen.max_no + 1:02d}_9100001.jpg"
+        p_leg = f"NOVUM/{C.remote_folder(h28.groups[legacy_cat].folder)}/{h28.groups[legacy_cat].max_no + 1:02d}_9100002.jpg"
         oi = self.index[self.hotels[other].page_url]
-        p_new = [f"NOVUM/{oi.hotel_folder}/Suite mit Bad-Dusche (35 m²)/{n}" for n in ("01_9100010.jpg", "02_9100011.jpg")]
+        p_new = [f"NOVUM/{C.remote_folder(oi.hotel_folder)}/Suite mit Bad-Dusche (35 m²)/{n}" for n in ("01_9100010.jpg", "02_9100011.jpg")]
         for p in [p_gen, p_leg] + p_new:
             self.assertIn(p, files, p)
             self.assertGreater(len(files[p]["data"]), 1500)
@@ -141,9 +151,9 @@ class CloudEndToEnd(unittest.TestCase):
         self.cloud.put(REMOTE_WB, self.orig)
         for p in [p_gen] + [p_leg] + p_new:
             files.pop(p, None)
-        left = f"NOVUM/{gen.folder}/05_9100001.jpg"
+        left = f"NOVUM/{C.remote_folder(gen.folder)}/05_9100001.jpg"
         self.cloud.put(left, b"x" * 3000)
-        before = {p for p in files if p.startswith(f"NOVUM/{gen.folder}/")}
+        before = {p for p in files if p.startswith(f"NOVUM/{C.remote_folder(gen.folder)}/")}
 
         orig_after = C.CloudHooks.after_download
         cloud = self.cloud
@@ -166,7 +176,7 @@ class CloudEndToEnd(unittest.TestCase):
         rows2 = {r[8]: r for r in ws2.iter_rows(min_row=13853, values_only=True) if r[1]}
         self.assertIn("05_9100001.jpg", rows2, "leftover file adopted with its existing number")
         self.assertEqual(rows2["05_9100001.jpg"][4], 5)
-        after = {p for p in files if p.startswith(f"NOVUM/{gen.folder}/")}
+        after = {p for p in files if p.startswith(f"NOVUM/{C.remote_folder(gen.folder)}/")}
         self.assertEqual(after, before, "no duplicate copy of the adopted image was uploaded")
 
     def test_bad_config_and_missing_workbook(self):

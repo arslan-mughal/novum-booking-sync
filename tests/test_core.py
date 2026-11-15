@@ -71,6 +71,17 @@ class UtilTests(unittest.TestCase):
             local_file_link("novum-hotels-images/Hotel X/Standardzimmer - 12 m²", "03_10.jpg"),
             "image/Hotel%20X/Standardzimmer%20-%2012%20m%C2%B2/03_10.jpg")
 
+    def test_disk_folder_matches_the_hyperlink_target(self):
+        # files must land where the 'Local File' hyperlink points: 'image/<hotel>/<room>'
+        # relative to the workbook's folder, not under the legacy 'novum-hotels-images/' root.
+        from bsync.workbook import disk_folder
+        self.assertEqual(disk_folder("novum-hotels-images/Garner Hotel Berlin - Schöneberg/General Images"),
+                         "image/Garner Hotel Berlin - Schöneberg/General Images")
+        self.assertEqual(disk_folder("novum-hotels-images/Hotel X/Standardzimmer - 12 m²"),
+                         "image/Hotel X/Standardzimmer - 12 m²")
+        self.assertEqual(disk_folder("image/Hotel X/General Images"),
+                         "image/Hotel X/General Images")
+
     def test_norm_category_keeps_size(self):
         self.assertEqual(norm_category("Standardzimmer – Nebengebäude"), norm_category("standardzimmer - nebengebäude"))
         self.assertNotEqual(norm_category("Standardzimmer (12 m²)"), norm_category("Standardzimmer (15 m²)"))

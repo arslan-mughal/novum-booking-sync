@@ -10,9 +10,17 @@ from pathlib import Path
 
 from .graph import GraphError, OneDrive
 from .hooks import Hooks
+from .workbook import DEFAULT_ROOT, disk_folder
 
 log = logging.getLogger("sync")
 _NAME_RE = re.compile(r"^(\d+)_(\d+)\.\w+$")
+
+
+def remote_folder(folder: str) -> str:
+    """Translate a workbook 'Local Folder' value into its OneDrive path, next to the workbook.
+    Same translation as workbook.disk_folder: 'novum-hotels-images/<hotel>/<room>' becomes
+    'image/<hotel>/<room>', exactly where the workbook's 'Local File' hyperlinks point."""
+    return disk_folder(folder)
 
 
 class StateStore:
@@ -60,8 +68,9 @@ class CloudHooks(Hooks):
             by_folder[it.folder].append(it)
         kept: list = []
         for folder, its in by_folder.items():
+            remote_dir = self.remote(remote_folder(folder))
             try:
-                names = self.od.list_names(self.remote(folder))
+                names = self.od.list_names(remote_dir)
             except GraphError:
                 names = []
             existing = {}
@@ -70,7 +79,7 @@ class CloudHooks(Hooks):
                 if m:
                     existing[m.group(2)] = (n, int(m.group(1)))
             for it in its:
-                local = self.staging / Path(*folder.split("/")) / it.file_name
+                local = self.staging / Path(*disk_folder(folder).split("/")) / it.file_name
                 if it.pid in existing:      # left behind by an earlier run whose workbook upload failed
                     it.file_name, it.no = existing[it.pid][0], existing[it.pid][1]
                     self.adopted += 1
@@ -78,7 +87,7 @@ class CloudHooks(Hooks):
                     local.unlink(missing_ok=True)
                     continue
                 try:
-                    self.od.upload_bytes(self.remote(f"{folder}/{it.file_name}"), local.read_bytes())
+                    self.od.upload_bytes(f"{remote_dir}/{it.file_name}", local.read_bytes())
                 except (GraphError, OSError) as e:
                     log.info(f"  upload FAILED {it.hotel_name} / {it.category} / {it.file_name}: {e}")
                     continue
