@@ -131,7 +131,44 @@ class DiffTests(unittest.TestCase):
                                      ("11", "Standardzimmer"), ("20", "Premium Zimmer"), ("500", "Standardzimmer")))
         self.assertEqual(d.new_categories, [])
         self.assertEqual([(n.pid, n.category) for n in d.new_images], [("500", "Standardzimmer (12 m²)")])
-        self.assertTrue(any("renamed" in n for n in d.notes))
+        self.assertTrue(any("renamed" in n or "size suffix differs" in n for n in d.notes))
+
+    def test_sized_scraped_room_maps_onto_unsized_existing_category(self):
+        # the workbook filed this hotel's rooms without sizes; the JSON path reports them with
+        # one. Most of the room's photos are new, so the overlap-based rename rule cannot see
+        # it - the base name alone must map it, or a duplicate room folder is created.
+        idx = make_index()
+        idx.groups["Standardzimmer"] = Group("Standardzimmer", "novum-hotels-images/Hotel X/Standardzimmer",
+                                             max_no=2, pids={"10", "11"}, rows=2)
+        del idx.groups["Standardzimmer (12 m²)"]
+        d = run(idx, scrape(("1", None), ("2", None), ("3", None), ("10", "Standardzimmer (12 m²)"),
+                            ("11", "Standardzimmer (12 m²)"), ("500", "Standardzimmer (12 m²)"),
+                            ("501", "Standardzimmer (12 m²)"), ("502", "Standardzimmer (12 m²)")))
+        self.assertEqual(d.new_categories, [])
+        self.assertEqual({(n.pid, n.category) for n in d.new_images},
+                         {("500", "Standardzimmer"), ("501", "Standardzimmer"), ("502", "Standardzimmer")})
+
+    def test_same_base_with_two_sized_existing_categories_uses_size(self):
+        idx = make_index()
+        idx.groups["Standardzimmer (23 m²)"] = Group(
+            "Standardzimmer (23 m²)", "novum-hotels-images/Hotel X/Standardzimmer - 23 m²",
+            max_no=1, pids={"30"}, rows=1)
+        d = run(idx, scrape(("1", None), ("2", None), ("3", None), ("10", "Standardzimmer (12 m²)"),
+                            ("11", "Standardzimmer (12 m²)"), ("30", "Standardzimmer (23 m²)"),
+                            ("600", "Standardzimmer (23 m²)")))
+        self.assertEqual(d.new_categories, [])
+        self.assertEqual([(n.pid, n.category) for n in d.new_images], [("600", "Standardzimmer (23 m²)")])
+
+    def test_bis_zu_personen_suffix_does_not_create_a_new_category(self):
+        idx = make_index()
+        idx.groups["Premium Zweibettzimmer"] = Group(
+            "Premium Zweibettzimmer", "novum-hotels-images/Hotel X/Premium Zweibettzimmer",
+            max_no=1, pids={"40"}, rows=1)
+        d = run(idx, scrape(("1", None), ("2", None), ("3", None),
+                            ("40", "Premium Zweibettzimmer – bis zu 3 Personen (28 m²)"),
+                            ("700", "Premium Zweibettzimmer – bis zu 3 Personen (28 m²)")))
+        self.assertEqual(d.new_categories, [])
+        self.assertEqual([(n.pid, n.category) for n in d.new_images], [("700", "Premium Zweibettzimmer")])
 
     def test_two_new_rooms_do_not_both_claim_one_existing_category(self):
         d = run(make_index(), scrape(("1", None), ("2", None), ("3", None), ("10", "Standardzimmer (12 m²)"),
@@ -306,6 +343,14 @@ class GalleryJsonTests(unittest.TestCase):
         from bsync.scraper import assemble_from_gallery
         emb = extract_embedded('<script type="application/json">{"a": 1}</script>')
         self.assertEqual(assemble_from_gallery(emb), [])
+
+    def test_sized_room_name_strips_bis_zu_suffixes(self):
+        from bsync.scraper import _sized_room_name
+        self.assertEqual(_sized_room_name("Premium Zweibettzimmer – bis zu 3 Personen", 28),
+                         "Premium Zweibettzimmer (28 m²)")
+        self.assertEqual(_sized_room_name("Premium-Zimmer mit 3 Einzelbetten – bis zu 3 Erwachsene", 27),
+                         "Premium-Zimmer mit 3 Einzelbetten (27 m²)")
+        self.assertEqual(_sized_room_name("Standardzimmer", None), "Standardzimmer")
 
 
 if __name__ == "__main__":

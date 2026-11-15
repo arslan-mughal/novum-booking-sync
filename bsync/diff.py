@@ -8,6 +8,7 @@ Existing files/rows are never renamed or renumbered; new images continue each gr
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .model import (
@@ -26,6 +27,22 @@ class DiffConfig:
     allow_missing_rooms: bool = False
 
 
+def _base_name(normed: str) -> str:
+    """Room name without a trailing size '(N m²)' and without a trailing '– bis zu N ...'
+    suffix: the workbook filed some hotels' rooms without sizes, while the embedded-gallery
+    path always appends one, so the two spellings name the same room."""
+    n = re.sub(r"\s*\(\d+\s*m²\)\s*$", "", normed).strip()
+    # norm_category collapses the spaces around dashes ('... – bis zu 3 Personen' ->
+    # '...-bis zu 3 personen'), so match the dash with no spaces required around it.
+    n = re.sub(r"-\s*bis zu\s+\d+\s+(erwachsene|personen|gäste)\s*$", "", n).strip()
+    return n
+
+
+def _size_of(normed: str):
+    m = re.search(r"\((\d+)\s*m²\)\s*$", normed)
+    return int(m.group(1)) if m else None
+
+
 def resolve_category(name: str, scraped_pids: set, index: HotelIndex, cfg: DiffConfig,
                      taken: set) -> tuple[str, str]:
     """Map a room name from the page onto an existing category of the hotel.
@@ -37,6 +54,20 @@ def resolve_category(name: str, scraped_pids: set, index: HotelIndex, cfg: DiffC
     for c in rooms:
         if norm_category(c) == n:
             return c, f"room '{name}' matched existing '{c}' (spelling/dash/case difference)"
+    # same room, size suffix differs: the workbook filed some hotels' rooms without a size
+    # ('Standardzimmer'), the scraper reports them with one ('Standardzimmer (12 m²)').
+    # The overlap-based rename rule below cannot see this when most of the room's photos are
+    # new (overlap < 0.60), so match on the base name when it is unambiguous for this hotel.
+    # If the hotel has several categories with that base name, the size disambiguates; if the
+    # size does not disambiguate either, fall through to the overlap rule / new category.
+    base = _base_name(n)
+    same_base = [c for c in rooms if _base_name(norm_category(c)) == base]
+    if len(same_base) == 1:
+        return same_base[0], f"room '{name}' matched existing '{same_base[0]}' (same room, size suffix differs)"
+    if len(same_base) > 1 and _size_of(n) is not None:
+        sized = [c for c in same_base if _size_of(norm_category(c)) == _size_of(n)]
+        if len(sized) == 1:
+            return sized[0], f"room '{name}' matched existing '{sized[0]}' (same room, size suffix differs)"
     best, best_score = None, 0.0
     if scraped_pids:
         for c, g in rooms.items():

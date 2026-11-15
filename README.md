@@ -8,14 +8,17 @@ Visits every Booking.com hotel link in the **NOVUM-Hotels** tab, finds photos th
 
 > **Read this first - what is and isn't verified**
 > The comparison, numbering, folder naming, downloading and workbook update are tested end-to-end against
-> your real workbook. **v1.0.2 (15 Nov 2026): the scraper now reads the gallery from the data embedded in
-> the page** (Booking's own gallery JSON: room names + sizes + photos), because the photo pop-ups stopped
-> opening in the browser - the gallery viewer is now a fullscreen "cinema" overlay, not a `role="dialog"`
-> pop-up, so the old click-and-wait approach found nothing. This was verified against a real saved page
-> (Garner Hotel Berlin - Schöneberg): the JSON re-finds all 93 known photos (coverage 100%) with every
-> room resolving onto its existing workbook category. If a page carries no gallery JSON, the tool falls
-> back to clicking the pop-ups (selectors in `bsync\scraper.py` -> `SELECTORS`). The live browser run
-> itself (all 126 hotels) is still untested - run one hotel first, as below.
+> your real workbook. **v1.0.3 (15 Nov 2026):** the room-name mapping now also matches on the base name
+> when only the size suffix differs ('Standardzimmer' in the workbook = 'Standardzimmer (12 m²)' on the
+> page) - the workbook filed some hotels' rooms without sizes, and without this the sync created a
+> duplicate room folder next to the existing one. **v1.0.2:** the scraper reads the gallery from the data
+> embedded in the page (Booking's own gallery JSON: room names + sizes + photos), because the photo
+> pop-ups stopped opening in the browser - the gallery viewer is now a fullscreen "cinema" overlay, not
+> a `role="dialog"` pop-up, so the old click-and-wait approach found nothing. Verified against a real
+> saved page (Garner Hotel Berlin - Schöneberg): the JSON re-finds all 93 known photos (coverage 100%)
+> with every room resolving onto its existing workbook category. If a page carries no gallery JSON, the
+> tool falls back to clicking the pop-ups (selectors in `bsync\scraper.py` -> `SELECTORS`). The live
+> browser run itself (all 126 hotels) is still untested - run one hotel first, as below.
 
 ## Setup (PowerShell)
 

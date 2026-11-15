@@ -177,7 +177,7 @@ def _sized_room_name(name: str, size_m2) -> str:
     '– bis zu N Erwachsene' suffix, which the workbook's categories never carry."""
     name = (name or "").replace("\u00a0", " ")
     name = re.sub(r"\s+", " ", name).strip()
-    name = re.sub(r"\s+[–—-]\s+bis zu\s+\d+\s+Erwachsene\s*$", "", name).strip()
+    name = re.sub(r"\s+[–—-]\s+bis zu\s+\d+\s+(Erwachsene|Personen|Gäste)\s*$", "", name).strip()
     if not name:
         return ""
     try:
